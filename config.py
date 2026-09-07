@@ -80,3 +80,39 @@ DEFAULT_BUDGET = {
 OUTPUT_CSV = "output/processed_expenses.csv"
 OUTPUT_JSON = "output/agent_report.json"
 OUTPUT_TXT = "output/agent_report.txt"
+
+# Base currency and reference FX rates used to normalise multi-currency rows.
+BASE_CURRENCY = "USD"
+FX_RATES = {"USD": 1.0, "EUR": 1.11, "GBP": 1.31, "CAD": 0.73, "AUD": 0.66}
+
+# Payment terms (days) by vendor keyword; matched like the approved-vendor list.
+VENDOR_TERMS = {
+    "aws": 7, "microsoft": 30, "delta airlines": 0, "marriott": 15,
+    "uber": 7, "wework": 30, "starbucks": 0, "the capital grille": 0,
+    "doordash": 0, "atlassian": 15, "adobe": 30, "verizon": 30,
+    "coned": 15, "staples": 30, "google ads": 0, "reed & miller": 60,
+    "office depot": 30, "late night pizza": 0, "refund desk": 0,
+}
+DEFAULT_TERMS_DAYS = 30
+
+# Expense class rules: CAPEX indicators and fixed/variable sub-class mapping.
+CAPEX_KEYWORDS = ["furniture", "hardware", "server", "machinery", "equipment",
+                  "laptop", "vehicle", "renovation", "lease improvement",
+                  "fixture", "desk", "printer"]
+CAPEX_MIN_SUPPLIES_AMOUNT = 1000.0
+FIXED_SUBCLASS = {"software_subscriptions", "utilities", "license_fees",
+                  "professional_services", "office_supplies"}
+VARIABLE_SUBCLASS = {"travel", "meals_entertainment", "marketing"}
+
+# Category confidence below this is treated as an uncertain classification.
+CONFIDENCE_THRESHOLD = 50.0
+
+# Benford's law first-digit audit tolerance: mean absolute deviation above this
+# triggers a first-digit anomaly flag.
+BENFORD_MAD_THRESHOLD = 0.05
+
+# Fraud Risk Index (0-100): rows above this are flagged high-fraud-risk.
+FRAUD_RISK_THRESHOLD = 65.0
+
+# Z-score beyond which an amount is a statistical outlier signal.
+Z_SCORE_THRESHOLD = 2.5

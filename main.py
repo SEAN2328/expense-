@@ -6,7 +6,10 @@ This agent automates an invoice/expense review workflow:
   2. ANALYSE  - categorise spend, detect anomalies and policy breaches
   3. DECIDE   - classify each expense as approved / review / rejected and
                 compute a risk score
-  4. OUTPUT   - write a CSV ledger, a human-readable report and a
+  4. ENRICH   - layer on modern finance controls (expense classes, FX
+                normalisation, payment-term aging, fraud/statistical signals)
+                and generate an executive summary
+  5. OUTPUT   - write a CSV ledger, a human-readable report and a
                 machine-readable JSON report with action items
 
 Usage:
@@ -23,6 +26,7 @@ from pathlib import Path
 from config import *
 from anomaly import analyze
 from categorizer import assign_categories
+from modern import enrich
 from reader import InputError, read_expenses
 from reporting import (
     synthesize_action_items,
@@ -36,31 +40,35 @@ DEFAULT_INPUT = "data/expenses.csv"
 
 def run_pipeline(input_path: str) -> int:
     """Execute the full agent workflow and return a process exit code."""
-    print("[1/4] READ: loading expenses from", input_path)
+    print("[1/5] READ: loading expenses from", input_path)
     df = read_expenses(input_path)
 
-    print("[2/4] ANALYSE: categorising and checking for anomalies...")
+    print("[2/5] ANALYSE: categorising and checking for anomalies...")
     df = assign_categories(df)
     results = analyze(df)
 
-    print("[3/4] DECIDE: classifying and scoring each expense...")
+    print("[3/5] DECIDE: classifying and scoring each expense...")
     df = results["df"]
     stats = results["stats"]
+
+    print("[4/5] ENRICH: expense classes, FX, aging and fraud signals...")
+    df, stats, extras = enrich(df, stats)
     action_items = synthesize_action_items(df, stats)
 
-    print("[4/4] OUTPUT: writing reports...")
+    print("[5/5] OUTPUT: writing reports...")
     csv_path = write_csv(df)
-    txt_path = write_text_report(_build_text_report(stats, action_items))
-    json_path = write_json_report(stats, action_items, df)
+    txt = _build_text_report(stats, action_items, extras)
+    txt_path = write_text_report(txt)
+    json_path = write_json_report(stats, action_items, df, extras=extras)
 
     _print_summary(stats, action_items)
     print(f"\nOutput files:\n  CSV : {csv_path}\n  TXT : {txt_path}\n  JSON: {json_path}")
     return 0
 
 
-def _build_text_report(stats, action_items) -> str:
+def _build_text_report(stats, action_items, extras=None) -> str:
     from reporting import build_text_report
-    return build_text_report(stats, action_items)
+    return build_text_report(stats, action_items, extras)
 
 
 def _print_summary(stats, action_items):
@@ -71,6 +79,7 @@ def _print_summary(stats, action_items):
     print(f"Total spend         : ${stats['total_amount']:,.2f}")
     print(f"Flagged for review  : {stats['total_flag_count']}")
     print(f"Approvals required  : {stats['approval_required_count']}")
+    print(f"Fraud-risk flagged  : {stats.get('fraud_high_count', 0)}")
     print(f"Action items        : {len(action_items)}")
     print("=" * 60)
 

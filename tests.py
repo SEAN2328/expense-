@@ -15,12 +15,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 from scripts.generate_data import generate  # noqa: E402
 from anomaly import analyze  # noqa: E402
 from categorizer import assign_categories  # noqa: E402
+from modern import enrich  # noqa: E402
 from reader import read_expenses  # noqa: E402
 
 
-def _run_pipeline_on(df: pd.DataFrame):
-    """Run categorization + analysis, return the annotated dataframe."""
-    import tempfile
+def _run_full_pipeline(df: pd.DataFrame):
+    """Run categorize -> analyze -> enrich, return (df, stats, extras)."""
     with tempfile.NamedTemporaryFile(suffix=".csv", delete=False) as f:
         df.to_csv(f.name, index=False, date_format="%Y-%m-%d %H:%M")
         tmp = f.name
@@ -28,9 +28,14 @@ def _run_pipeline_on(df: pd.DataFrame):
         raw = read_expenses(tmp)
         annotated = assign_categories(raw)
         result = analyze(annotated)
-        return result["df"], result["stats"]
+        return enrich(result["df"], result["stats"])
     finally:
         os.unlink(tmp)
+
+
+def _run_pipeline_on(df: pd.DataFrame):
+    df, stats, _ = _run_full_pipeline(df)
+    return df, stats
 
 
 def test_all_injected_anomalies_detected():
@@ -53,6 +58,39 @@ def test_all_injected_anomalies_detected():
     assert (aws["status"] == "review").all()
     assert (aws["flags"].str.contains("exceeds-approval-limit")).all()
     print("OK: all 6 injected anomaly types detected.")
+
+
+def test_expense_class_fx_and_aging():
+    df, stats, extras = _run_full_pipeline(generate())
+    assert {"account_class", "sub_class"} <= set(df.columns)
+    assert {"fx_rate", "amount_usd"} <= set(df.columns)
+    assert {"terms_days", "due_date", "aging_bucket"} <= set(df.columns)
+    # GBP row normalised to USD (Atlassian, 1200 GBP)
+    gbp = df[df["currency"] == "GBP"]
+    assert len(gbp) >= 1
+    assert gbp["amount_usd"].iloc[0] > gbp["amount"].iloc[0]
+    # Missing-rate row flagged
+    zzz = df[df["currency"] == "ZZZ"]
+    assert (zzz["fx_rate_missing"]).all()
+    assert "missing-fx-rate" in zzz["flags"].iloc[0]
+    # CAPEX classification present
+    assert (df["account_class"] == "CAPEX").any()
+    assert extras["expense_class"]
+    assert extras["aging"]["buckets"]
+    print("OK: expense classes, FX normalisation and payables aging add columns "
+          "and reports.")
+
+
+def test_fraud_signals():
+    df, stats, extras = _run_full_pipeline(generate())
+    assert "fraud_risk_index" in df.columns
+    assert "high_fraud_risk" in df.columns
+    assert 0 <= df["fraud_risk_index"].max() <= 100
+    assert extras["benford"]["count"] >= 30
+    assert stats["fraud_high_count"] == int(df["high_fraud_risk"].sum())
+    assert extras["summary"]
+    assert isinstance(extras["top_risk"], list)
+    print("OK: Benford, Fraud Risk Index and executive summary produced.")
 
 
 def test_clean_expenses_are_approved():
@@ -138,6 +176,8 @@ def test_input_validation():
 
 if __name__ == "__main__":
     test_all_injected_anomalies_detected()
+    test_expense_class_fx_and_aging()
+    test_fraud_signals()
     test_clean_expenses_are_approved()
     test_category_cap_breach_and_vendor_screening()
     test_compliance_rules_can_be_disabled()

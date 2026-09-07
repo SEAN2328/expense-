@@ -61,6 +61,17 @@ The sample run on 47 expense rows:
 - reports spend by category, flag breakdown, budget variance, vendor
   concentration and a cash-flow forecast.
 
+## Modern finance controls
+
+| Module | Feature |
+|--------|---------|
+| `expense_class.py` | CAPEX / OPEX classification (fixed / variable), category-confidence scoring |
+| `money.py` | Multi-currency normalization (USD base), FX exposure by currency |
+| `treasury.py` | Per-vendor payment terms, aging buckets (not due / 0-30 / 31-60 / 61-90 / 90+) |
+| `fraud.py` | Benford's law first-digit check, per-category Z-score signals, composite Fraud Risk Index |
+| `nlg.py` | Executive natural-language summary (template-based; LLM provider swappable) |
+| `modern.py` | Orchestrates the enrichment step, recomputes flags & status with modern rules |
+
 ## Configuration
 
 All policy rules live in `config.py` — outliers threshold, approval limit,
