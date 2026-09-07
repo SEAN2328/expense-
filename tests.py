@@ -58,13 +58,64 @@ def test_all_injected_anomalies_detected():
 def test_clean_expenses_are_approved():
     clean = pd.DataFrame({
         "date": ["2026-08-10 10:00", "2026-08-11 11:00"],
-        "vendor": ["Office Depot", "Airport Cab Co."],
+        "vendor": ["Office Depot", "Uber"],
         "description": ["Printer paper", "Taxi to HQ"],
         "amount": [25.00, 18.00],
     })
     df, _ = _run_pipeline_on(clean)
     assert (df["status"] == "approved").all()
     print("OK: clean expenses auto-approved, zero false positives.")
+
+
+def test_category_cap_breach_and_vendor_screening():
+    capped = pd.DataFrame({
+        "date": ["2026-08-10 20:00"],
+        "vendor": ["The Capital Grille"],
+        "description": ["Client dinner"],
+        "amount": [150.00],
+    })
+    df, _ = _run_pipeline_on(capped)
+    row = df.iloc[0]
+    assert "category-cap-breach" in row["flags"]
+    assert row["status"] == "review"
+
+    unknown = pd.DataFrame({
+        "date": ["2026-08-10 12:00"],
+        "vendor": ["Nexus Consulting Group"],
+        "description": ["Advisory project"],
+        "amount": [900.00],
+    })
+    df2, _ = _run_pipeline_on(unknown)
+    assert "unapproved-vendor" in df2.iloc[0]["flags"]
+    print("OK: category-cap breach and unapproved-vendor screening detected.")
+
+
+def test_compliance_rules_can_be_disabled():
+    capped = pd.DataFrame({
+        "date": ["2026-08-10 20:00"],
+        "vendor": ["Random Vendor XYZ"],
+        "description": ["Widget purchase"],
+        "amount": [5000.00],
+    })
+    from config import NO_CAPS, NO_VENDORS
+    result = analyze(assign_categories(capped),
+                     category_caps=NO_CAPS, approved_vendors=NO_VENDORS)
+    df = result["df"]
+    assert df.iloc[0]["status"] == "review"  # only outlier/approval logic remains
+    assert "category-cap-breach" not in df.iloc[0]["flags"]
+    assert "unapproved-vendor" not in df.iloc[0]["flags"]
+    print("OK: caps and vendor screening can be toggled off.")
+
+
+def test_forecast_and_concentration():
+    from analytics import forecast_next_period, vendor_concentration
+    df, _ = _run_pipeline_on(generate())
+    forecast = forecast_next_period(df)
+    assert forecast["forecast"] >= 0
+    conc = vendor_concentration(df)
+    assert conc["total"] == df["amount"].sum()
+    assert conc["vendors"]
+    print("OK: cash-flow forecast and vendor concentration analytics run.")
 
 
 def test_input_validation():
@@ -88,5 +139,8 @@ def test_input_validation():
 if __name__ == "__main__":
     test_all_injected_anomalies_detected()
     test_clean_expenses_are_approved()
+    test_category_cap_breach_and_vendor_screening()
+    test_compliance_rules_can_be_disabled()
+    test_forecast_and_concentration()
     test_input_validation()
     print("\nAll tests passed.")

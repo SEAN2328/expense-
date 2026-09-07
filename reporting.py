@@ -121,6 +121,20 @@ def synthesize_action_items(df: pd.DataFrame, stats: dict) -> list:
                 "message": (f"Meal expense at {row['vendor']} outside business hours; "
                             "check policy compliance."),
             })
+        if "category-cap-breach" in reason:
+            cap = row.get("category_cap")
+            cap_txt = f"${cap:.2f}" if pd.notna(cap) else "the policy cap"
+            items.append({
+                "severity": "medium",
+                "message": (f"{row['vendor']} expense of ${row['amount']:.2f} exceeds "
+                            f"category '{row['category']}' cap of {cap_txt}; policy breach."),
+            })
+        if "unapproved-vendor" in reason:
+            items.append({
+                "severity": "high",
+                "message": (f"Vendor '{row['vendor']}' is not on the approved vendor "
+                            "list; compliance review required before payment."),
+            })
 
     # Rejected rows (non-positive amounts).
     rejected = df[df["status"] == "rejected"]
