@@ -5,6 +5,7 @@ Deploy: push to GitHub, then create an app on https://share.streamlit.io
 pointing at app.py (streamlit and pandas are in requirements.txt).
 """
 
+import pandas as pd
 import streamlit as st
 
 from reader import InputError, read_expenses
